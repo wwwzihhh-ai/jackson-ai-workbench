@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#214b37">
+  <meta name="description" content="Jackson 的个人 AI 工作台：健身计划、财经观察和今日待办。">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Jackson 工作台">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32x32.png">
+  <title>Jackson 工作台</title>
+  <link rel="stylesheet" href="./src/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="主导航">
+      <div class="brand">
+        <div class="brand-mark">J</div>
+        <h1>Jackson 工作台</h1>
+        <p>Body · Money · Focus</p>
+      </div>
+      <nav id="navList" class="nav-list"></nav>
+      <div class="sidebar-footer">
+        长按模块 500ms 调整顺序<br>
+        <span id="footerDate"></span>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div class="topbar-title">
+          <strong id="pageTitle">今日总览</strong>
+          <span id="pageSubtitle">把身体、资产和今天放进一个屏幕</span>
+        </div>
+        <div class="topbar-actions">
+          <button class="icon-button" id="dataButton" type="button" aria-label="数据管理" title="数据管理">⇄</button>
+          <button class="icon-button" id="themeButton" type="button" aria-label="切换主题" title="切换主题">◐</button>
+        </div>
+      </header>
+      <div id="content" class="content"></div>
+    </main>
+  </div>
+
+  <div id="setupBackdrop" class="modal-backdrop" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="setupTitle">
+      <div class="modal-header">
+        <div>
+          <h3 id="setupTitle">建立你的训练档案</h3>
+          <p>只用于在本机生成参考训练计划。重量可在每个动作中手动调整。</p>
+        </div>
+        <button class="close-button" type="button" onclick="closeSetup()" aria-label="关闭">×</button>
+      </div>
+      <form id="profileForm">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="height">身高（cm）</label>
+            <input class="field" id="height" name="height" type="number" min="120" max="230" value="175" required>
+          </div>
+          <div class="form-group">
+            <label for="weight">当前体重（kg）</label>
+            <input class="field" id="weight" name="weight" type="number" min="35" max="250" step="0.1" value="70" required>
+          </div>
+          <div class="form-group">
+            <label for="targetWeight">目标体重（kg）</label>
+            <input class="field" id="targetWeight" name="targetWeight" type="number" min="35" max="250" step="0.1" value="68" required>
+          </div>
+          <div class="form-group">
+            <label for="level">训练水平</label>
+            <select class="select" id="level" name="level">
+              <option value="beginner">新手</option>
+              <option value="intermediate">有规律训练</option>
+              <option value="advanced">进阶</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="goal">训练目标</label>
+            <select class="select" id="goal" name="goal">
+              <option value="muscle">增肌</option>
+              <option value="fatloss">减脂</option>
+              <option value="shape">塑形</option>
+              <option value="fitness">体能</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="equipment">可用器械</label>
+            <select class="select" id="equipment" name="equipment">
+              <option value="gym">健身房</option>
+              <option value="dumbbell">居家哑铃</option>
+              <option value="bodyweight">徒手</option>
+            </select>
+          </div>
+          <div class="form-group full">
+            <label for="days">每周训练天数</label>
+            <select class="select" id="days" name="days">
+              <option value="1">1 天 · 全身训练</option>
+              <option value="2">2 天 · 上下肢</option>
+              <option value="3" selected>3 天 · 推拉腿</option>
+              <option value="4">4 天 · 上下肢循环</option>
+              <option value="5">5 天 · 推拉腿 + 上下肢</option>
+              <option value="6">6 天 · 推拉腿循环</option>
+            </select>
+          </div>
+        </div>
+        <div class="notice">安全提示：计划中的重量只是保守起点。优先选择动作稳定、每组结束仍能保留约 2–3 次余力的重量；出现疼痛、眩晕或异常不适请立即停止并咨询专业人士。</div>
+        <div class="form-actions">
+          <button class="soft-button" type="button" onclick="closeSetup()">稍后设置</button>
+          <button class="primary-button" type="submit">生成今日计划</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <div id="celebrationBackdrop" class="modal-backdrop" hidden>
+    <section class="modal celebration" role="dialog" aria-modal="true" aria-labelledby="celebrationTitle">
+      <div class="celebration-emoji">🎉</div>
+      <h3 id="celebrationTitle">今天完成得很漂亮</h3>
+      <p id="celebrationCopy">训练已记录。</p>
+      <button class="primary-button" type="button" onclick="closeCelebration()">收下这次进步</button>
+    </section>
+  </div>
+
+  <div id="dataBackdrop" class="modal-backdrop" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="dataTitle">
+      <div class="modal-header">
+        <div>
+          <h3 id="dataTitle">本地数据管理</h3>
+          <p>所有资料只保存在当前浏览器。建议定期导出备份。</p>
+        </div>
+        <button class="close-button" type="button" onclick="closeDataModal()" aria-label="关闭">×</button>
+      </div>
+      <div class="panel" style="box-shadow:none">
+        <p class="item-title">备份与迁移</p>
+        <p class="item-meta">导出 JSON 后，可在另一台设备上的本页面重新导入。</p>
+        <div class="form-actions" style="justify-content:flex-start">
+          <button class="primary-button" type="button" onclick="exportData()">导出备份</button>
+          <button class="soft-button" type="button" onclick="document.getElementById('importFile').click()">导入备份</button>
+          <input id="importFile" type="file" accept="application/json" hidden>
+        </div>
+      </div>
+      <div class="notice">重置会清除当前浏览器中的档案、训练记录、待办和导航顺序。此操作不可撤销，请先导出备份。</div>
+      <div class="form-actions">
+        <button class="danger-button" type="button" onclick="resetData()">重置全部数据</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="timerBar" class="timer-bar" hidden>
+    <div class="timer-value" id="timerValue">01:30</div>
+    <div class="timer-copy" id="timerCopy">组间休息</div>
+    <button type="button" onclick="skipTimer()">跳过</button>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="./src/app.js" defer></script>
+</body>
+</html>
