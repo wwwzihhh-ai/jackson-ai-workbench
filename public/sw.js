@@ -1,10 +1,10 @@
-const CACHE_NAME = "jackson-workbench-v1.1.1";
+const CACHE_NAME = "jackson-workbench-v1.1.2";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./src/styles.css",
-  "./src/app.js",
-  "./manifest.webmanifest",
+  "./src/styles.css?v=1.1.2",
+  "./src/app.js?v=1.1.2",
+  "./manifest.webmanifest?v=1.1.2",
   "./apple-touch-icon.png",
   "./icons/icon-192.png",
   "./icons/icon-512.png"
