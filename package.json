@@ -2,6 +2,7 @@
   "name": "jackson-ai-workbench",
   "version": "1.1.0",
   "private": true,
+  "packageManager": "pnpm@11.0.0",
   "description": "Jackson 的个人 AI 工作台，包含健身、财经观察和今日待办。",
   "type": "module",
   "scripts": {

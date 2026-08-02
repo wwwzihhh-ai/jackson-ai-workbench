@@ -55,7 +55,13 @@ pnpm build
 
 构建成功后，可部署文件位于 `dist` 文件夹。
 
-## 部署到 Vercel
+## 免费部署到 GitHub Pages（当前推荐）
+
+仓库已经包含 `.github/workflows/deploy-pages.yml`。在 GitHub 仓库的 **Settings → Pages** 中把 Source 设为 **GitHub Actions** 后，每次向 `main` 分支推送代码，GitHub 都会自动构建并更新网站。
+
+网站地址：`https://wwwzihhh-ai.github.io/jackson-ai-workbench/`
+
+## 部署到 Vercel（可选）
 
 1. 将项目推送到 GitHub。
 2. 使用 GitHub 登录 Vercel。
@@ -75,7 +81,7 @@ pnpm build
 
 ## 在 iPhone 添加到主屏幕
 
-1. 使用 **Safari** 打开部署后的 Vercel 网站。
+1. 使用 **Safari** 打开部署后的 GitHub Pages 或 Vercel 网站。
 2. 点击 Safari 底部的 **分享** 按钮（方框向上箭头）。
 3. 在分享菜单中向下找到并点击 **添加到主屏幕**。
 4. 名称保留为“Jackson 工作台”，点击右上角 **添加**。

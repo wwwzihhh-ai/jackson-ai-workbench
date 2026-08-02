@@ -1,19 +1,21 @@
-const CACHE_NAME = "jackson-workbench-v1.1.0";
+const CACHE_NAME = "jackson-workbench-v1.1.1";
 const APP_SHELL = [
-  "/",
-  "/index.html",
-  "/src/styles.css",
-  "/src/app.js",
-  "/manifest.webmanifest",
-  "/apple-touch-icon.png",
-  "/icons/icon-192.png",
-  "/icons/icon-512.png"
+  "./",
+  "./index.html",
+  "./src/styles.css",
+  "./src/app.js",
+  "./manifest.webmanifest",
+  "./apple-touch-icon.png",
+  "./icons/icon-192.png",
+  "./icons/icon-512.png"
 ];
+
+const appUrl = (path) => new URL(path, self.registration.scope).toString();
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(APP_SHELL))
+      .then((cache) => cache.addAll(APP_SHELL.map(appUrl)))
       .then(() => self.skipWaiting())
   );
 });
@@ -43,7 +45,7 @@ self.addEventListener("fetch", (event) => {
       .catch(async () => {
         const cached = await caches.match(event.request);
         if (cached) return cached;
-        if (event.request.mode === "navigate") return caches.match("/index.html");
+        if (event.request.mode === "navigate") return caches.match(appUrl("./index.html"));
         return Response.error();
       })
   );
