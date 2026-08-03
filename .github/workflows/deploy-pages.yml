@@ -3,6 +3,8 @@ name: Deploy GitHub Pages
 on:
   push:
     branches: ["main"]
+  schedule:
+    - cron: "17,47 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -29,6 +31,30 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Refresh Chinese finance news
+        id: news
+        shell: bash
+        run: |
+          if node scripts/fetch-news.mjs; then
+            echo "News feed refreshed from GDELT."
+          elif [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "Scheduled news refresh failed; keeping the last successful Pages deployment."
+            exit 1
+          else
+            echo "Push build could not refresh GDELT; trying to retain the currently published feed."
+            if curl --fail --silent --show-error --location --max-time 20 \
+              "https://wwwzihhh-ai.github.io/jackson-ai-workbench/news.json" \
+              --output /tmp/jackson-previous-news.json; then
+              if node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('/tmp/jackson-previous-news.json','utf8'));if(!Array.isArray(p.items))process.exit(1)"; then
+                mv /tmp/jackson-previous-news.json public/news.json
+                echo "Previous published news feed retained."
+              else
+                echo "Published feed was invalid; the checked-in demo fallback will be used."
+              fi
+            else
+              echo "No previous feed is available; the clearly labelled demo fallback will be used."
+            fi
+          fi
       - name: Build
         run: pnpm build
       - name: Configure Pages

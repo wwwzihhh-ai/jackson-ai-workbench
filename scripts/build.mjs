@@ -19,6 +19,7 @@ const requiredOutputs = [
   "src/styles.css",
   "src/app.js",
   "manifest.webmanifest",
+  "news.json",
   "sw.js",
   "apple-touch-icon.png",
   "icons/icon-192.png",
@@ -28,9 +29,7 @@ const requiredOutputs = [
 for (const relativePath of requiredOutputs) {
   const file = join(output, relativePath);
   const info = await stat(file).catch(() => null);
-  if (!info?.isFile()) {
-    throw new Error(`构建缺少文件：${relativePath}`);
-  }
+  if (!info?.isFile()) throw new Error(`构建缺少文件：${relativePath}`);
 }
 
 const builtHtml = await readFile(join(output, "index.html"), "utf8");

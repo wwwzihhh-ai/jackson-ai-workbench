@@ -10,11 +10,11 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Jackson 工作台">
   <meta name="format-detection" content="telephone=no">
-  <link rel="manifest" href="./manifest.webmanifest?v=1.1.2">
+  <link rel="manifest" href="./manifest.webmanifest?v=1.2.0">
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32x32.png">
   <title>Jackson 工作台</title>
-  <link rel="stylesheet" href="./src/styles.css?v=1.1.2">
+  <link rel="stylesheet" href="./src/styles.css?v=1.2.0">
 </head>
 <body>
   <div class="app-shell">
@@ -51,7 +51,7 @@
       <div class="modal-header">
         <div>
           <h3 id="setupTitle">建立你的训练档案</h3>
-          <p>只用于在本机生成参考训练计划。重量可在每个动作中手动调整。</p>
+          <p>只用于在本机保存训练偏好。动作、重量和每周安排都由你决定。</p>
         </div>
         <button class="close-button" type="button" onclick="closeSetup()" aria-label="关闭">×</button>
       </div>
@@ -94,22 +94,73 @@
               <option value="bodyweight">徒手</option>
             </select>
           </div>
-          <div class="form-group full">
-            <label for="days">每周训练天数</label>
-            <select class="select" id="days" name="days">
-              <option value="1">1 天 · 全身训练</option>
-              <option value="2">2 天 · 上下肢</option>
-              <option value="3" selected>3 天 · 推拉腿</option>
-              <option value="4">4 天 · 上下肢循环</option>
-              <option value="5">5 天 · 推拉腿 + 上下肢</option>
-              <option value="6">6 天 · 推拉腿循环</option>
-            </select>
-          </div>
         </div>
-        <div class="notice">安全提示：计划中的重量只是保守起点。优先选择动作稳定、每组结束仍能保留约 2–3 次余力的重量；出现疼痛、眩晕或异常不适请立即停止并咨询专业人士。</div>
+        <div class="notice">安全提示：系统不会根据体重估算训练重量。请从能稳定完成动作、每组结束仍保留约 2–3 次余力的重量开始；出现疼痛、眩晕或异常不适请立即停止并咨询专业人士。</div>
         <div class="form-actions">
           <button class="soft-button" type="button" onclick="closeSetup()">稍后设置</button>
-          <button class="primary-button" type="submit">生成今日计划</button>
+          <button class="primary-button" type="submit">保存并配置周计划</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <div id="scheduleBackdrop" class="modal-backdrop" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="scheduleTitle">
+      <div class="modal-header">
+        <div>
+          <h3 id="scheduleTitle">配置一周训练</h3>
+          <p>每天只安排一个部位，也可以选择休息。七天全部选择后才能保存。</p>
+        </div>
+        <button class="close-button" type="button" onclick="closeSchedule()" aria-label="关闭">×</button>
+      </div>
+      <form id="scheduleForm">
+        <div id="scheduleFields" class="schedule-fields"></div>
+        <div class="notice">这是个人记录工具，不代替医生或教练建议。同一肌群应留出恢复时间；出现疼痛、眩晕或异常不适请立即停止。</div>
+        <div class="form-actions">
+          <button class="soft-button" type="button" onclick="closeSchedule()">稍后设置</button>
+          <button class="primary-button" type="submit">保存周计划</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <div id="trainingEditorBackdrop" class="modal-backdrop" hidden>
+    <section class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="trainingEditorTitle">
+      <div class="modal-header">
+        <div>
+          <h3 id="trainingEditorTitle">管理训练动作</h3>
+          <p id="trainingEditorCopy">新增、编辑、删除或调整动作顺序。</p>
+        </div>
+        <button class="close-button" type="button" onclick="closeTrainingEditor()" aria-label="关闭">×</button>
+      </div>
+      <div id="trainingEditorBody"></div>
+    </section>
+  </div>
+
+  <div id="exerciseBackdrop" class="modal-backdrop nested-modal" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="exerciseTitle">
+      <div class="modal-header">
+        <div>
+          <h3 id="exerciseTitle">编辑动作</h3>
+          <p>重量留空也可以，填写后会在下次同一动作中自动沿用。</p>
+        </div>
+        <button class="close-button" type="button" onclick="closeExerciseEditor()" aria-label="关闭">×</button>
+      </div>
+      <form id="exerciseForm">
+        <div class="form-grid">
+          <div class="form-group full"><label for="exerciseName">动作名称</label><input class="field" id="exerciseName" name="name" maxlength="40" required></div>
+          <div class="form-group full"><label for="exerciseEquipment">器械</label><input class="field" id="exerciseEquipment" name="equipment" maxlength="40" required></div>
+          <div class="form-group"><label for="exerciseKind">类型</label><select class="select" id="exerciseKind" name="kind"><option value="strength">力量/核心</option><option value="duration">计时/有氧</option></select></div>
+          <div class="form-group"><label for="exerciseSets">组数</label><input class="field" id="exerciseSets" name="sets" type="number" min="1" max="12" value="3" required></div>
+          <div class="form-group"><label for="exerciseReps">次数或时长</label><input class="field" id="exerciseReps" name="reps" maxlength="20" placeholder="例如 6–8 或 25 分钟" required></div>
+          <div class="form-group"><label for="exerciseWeight">重量（kg，可留空）</label><input class="field" id="exerciseWeight" name="weight" type="number" min="0" max="500" step="0.5"></div>
+          <div class="form-group"><label for="exerciseRest">组间休息（秒）</label><input class="field" id="exerciseRest" name="rest" type="number" min="0" max="600" value="75" required></div>
+          <div class="form-group full"><label for="exerciseNote">备注</label><input class="field" id="exerciseNote" name="note" maxlength="80" placeholder="例如：下放保持控制"></div>
+        </div>
+        <label id="saveTemplateLabel" class="checkbox-line"><input id="saveToTemplate" name="saveToTemplate" type="checkbox"> 同时保存到该部位模板</label>
+        <div class="form-actions">
+          <button class="soft-button" type="button" onclick="closeExerciseEditor()">取消</button>
+          <button class="primary-button" type="submit">保存动作</button>
         </div>
       </form>
     </section>
@@ -157,6 +208,6 @@
 
   <div id="toast" class="toast" hidden></div>
 
-  <script src="./src/app.js?v=1.1.2" defer></script>
+  <script src="./src/app.js?v=1.2.0" defer></script>
 </body>
 </html>
