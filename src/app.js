@@ -32,6 +32,12 @@
       var weekDays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
       var trainingEditor = { scope: "template", part: "chest", index: -1 };
       var financeFeed = { loaded: false, generatedAt: null, items: [], source: "本地演示" };
+      var MEDIA_DB_NAME = "jackson.ai.workbench.media";
+      var MEDIA_STORE_NAME = "weightPhotos";
+      var weightCalendarCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+      var selectedWeightDate = dateKey();
+      var weightPreviewUrl = null;
+      var renderedWeightPhotoUrls = [];
 
       function exerciseTemplate(id, part, name, equipment, sets, reps, rest, art, kind, note) {
         return { id: id, part: part, kind: kind || "strength", name: name, equipment: equipment, sets: sets, reps: reps, rest: rest, weight: null, note: note || "", art: art };
@@ -99,7 +105,7 @@
       function createDefaultState() {
         var today = dateKey();
         return {
-          version: "1.2",
+          version: "1.3",
           active: "overview",
           theme: "system",
           sortMode: false,
@@ -117,6 +123,7 @@
             templates: createDefaultTemplates(),
             lastWeights: {}
           },
+          weightCheckins: [],
           tasks: [
             { id: "task-welcome-1", title: "完成 Jackson 工作台首次设置", category: "生活", priority: "high", due: today, done: false, createdAt: Date.now() },
             { id: "task-welcome-2", title: "确认本周训练安排", category: "健身", priority: "medium", due: today, done: false, createdAt: Date.now() + 1 },
@@ -154,7 +161,20 @@
             next.workout.weekSchedule = null;
           }
           if (!next.workout.currentPart && next.workout.planDate === dateKey() && next.workout.currentPlan.length) next.workout.currentPart = "legacy";
-          next.version = "1.2";
+          next.weightCheckins = Array.isArray(saved.weightCheckins) ? saved.weightCheckins.filter(function (entry) {
+            return entry && /^\d{4}-\d{2}-\d{2}$/.test(entry.date || "") && Number.isFinite(Number(entry.weight)) && Number(entry.weight) > 0 && typeof entry.photoId === "string";
+          }).map(function (entry) {
+            return {
+              id: String(entry.id || uid("weight")),
+              date: entry.date,
+              weight: Math.round(Number(entry.weight) * 10) / 10,
+              note: String(entry.note || "").slice(0, 80),
+              photoId: entry.photoId,
+              createdAt: Number(entry.createdAt) || Date.now(),
+              updatedAt: Number(entry.updatedAt) || Number(entry.createdAt) || Date.now()
+            };
+          }).sort(function (left, right) { return left.date.localeCompare(right.date); }) : [];
+          next.version = "1.3";
           next.tasks = Array.isArray(saved.tasks) ? saved.tasks : base.tasks;
           next.navOrder = Array.isArray(saved.navOrder) ? saved.navOrder.filter(function (id) { return knownModules.indexOf(id) >= 0; }) : base.navOrder;
           knownModules.forEach(function (id) { if (next.navOrder.indexOf(id) < 0) next.navOrder.push(id); });
@@ -172,6 +192,128 @@
       }
 
       saveState();
+
+      function openMediaDb() {
+        return new Promise(function (resolve, reject) {
+          if (!("indexedDB" in window)) {
+            reject(new Error("当前浏览器不支持本地照片数据库"));
+            return;
+          }
+          var request = indexedDB.open(MEDIA_DB_NAME, 1);
+          request.onupgradeneeded = function () {
+            if (!request.result.objectStoreNames.contains(MEDIA_STORE_NAME)) request.result.createObjectStore(MEDIA_STORE_NAME, { keyPath: "id" });
+          };
+          request.onsuccess = function () { resolve(request.result); };
+          request.onerror = function () { reject(request.error || new Error("无法打开本地照片数据库")); };
+          request.onblocked = function () { reject(new Error("本地照片数据库正在被其他页面占用")); };
+        });
+      }
+
+      async function mediaGet(id) {
+        var db = await openMediaDb();
+        return new Promise(function (resolve, reject) {
+          var request = db.transaction(MEDIA_STORE_NAME, "readonly").objectStore(MEDIA_STORE_NAME).get(id);
+          request.onsuccess = function () { db.close(); resolve(request.result || null); };
+          request.onerror = function () { db.close(); reject(request.error); };
+        });
+      }
+
+      async function mediaGetAll() {
+        var db = await openMediaDb();
+        return new Promise(function (resolve, reject) {
+          var request = db.transaction(MEDIA_STORE_NAME, "readonly").objectStore(MEDIA_STORE_NAME).getAll();
+          request.onsuccess = function () { db.close(); resolve(Array.isArray(request.result) ? request.result : []); };
+          request.onerror = function () { db.close(); reject(request.error); };
+        });
+      }
+
+      async function mediaWrite(record) {
+        var db = await openMediaDb();
+        return new Promise(function (resolve, reject) {
+          var transaction = db.transaction(MEDIA_STORE_NAME, "readwrite");
+          transaction.objectStore(MEDIA_STORE_NAME).put(record);
+          transaction.oncomplete = function () { db.close(); resolve(); };
+          transaction.onerror = function () { db.close(); reject(transaction.error); };
+          transaction.onabort = function () { db.close(); reject(transaction.error || new Error("照片保存被中断")); };
+        });
+      }
+
+      async function mediaDelete(id) {
+        var db = await openMediaDb();
+        return new Promise(function (resolve, reject) {
+          var transaction = db.transaction(MEDIA_STORE_NAME, "readwrite");
+          transaction.objectStore(MEDIA_STORE_NAME).delete(id);
+          transaction.oncomplete = function () { db.close(); resolve(); };
+          transaction.onerror = function () { db.close(); reject(transaction.error); };
+        });
+      }
+
+      async function mediaClear() {
+        var db = await openMediaDb();
+        return new Promise(function (resolve, reject) {
+          var transaction = db.transaction(MEDIA_STORE_NAME, "readwrite");
+          transaction.objectStore(MEDIA_STORE_NAME).clear();
+          transaction.oncomplete = function () { db.close(); resolve(); };
+          transaction.onerror = function () { db.close(); reject(transaction.error); };
+        });
+      }
+
+      function blobToDataUrl(blob) {
+        return new Promise(function (resolve, reject) {
+          var reader = new FileReader();
+          reader.onload = function () { resolve(reader.result); };
+          reader.onerror = function () { reject(reader.error); };
+          reader.readAsDataURL(blob);
+        });
+      }
+
+      function dataUrlToBlob(dataUrl) {
+        var parts = String(dataUrl || "").split(",");
+        var match = parts[0] && parts[0].match(/^data:([^;]+);base64$/);
+        if (!match || !parts[1]) throw new Error("备份中的照片格式不正确");
+        var binary = atob(parts[1]);
+        var bytes = new Uint8Array(binary.length);
+        for (var index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+        return new Blob([bytes], { type: match[1] });
+      }
+
+      function compressPhoto(file) {
+        return new Promise(function (resolve, reject) {
+          if (!file || !/^image\//i.test(file.type || "")) {
+            reject(new Error("请选择照片文件"));
+            return;
+          }
+          if (file.size > 25 * 1024 * 1024) {
+            reject(new Error("照片超过 25MB，请先在相册中裁剪或压缩"));
+            return;
+          }
+          var objectUrl = URL.createObjectURL(file);
+          var image = new Image();
+          image.onload = function () {
+            try {
+              var maxSide = 1440;
+              var scale = Math.min(1, maxSide / Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height));
+              var canvas = document.createElement("canvas");
+              canvas.width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
+              canvas.height = Math.max(1, Math.round((image.naturalHeight || image.height) * scale));
+              var context = canvas.getContext("2d");
+              context.drawImage(image, 0, 0, canvas.width, canvas.height);
+              canvas.toBlob(function (blob) {
+                URL.revokeObjectURL(objectUrl);
+                resolve(blob || file);
+              }, "image/jpeg", .82);
+            } catch (error) {
+              URL.revokeObjectURL(objectUrl);
+              resolve(file);
+            }
+          };
+          image.onerror = function () {
+            URL.revokeObjectURL(objectUrl);
+            resolve(file);
+          };
+          image.src = objectUrl;
+        });
+      }
 
       function escapeHtml(value) {
         return String(value == null ? "" : value)
@@ -543,6 +685,117 @@
         }).join("");
       }
 
+      function weightCheckinForDate(date) {
+        return state.weightCheckins.find(function (entry) { return entry.date === date; }) || null;
+      }
+
+      function sortedWeightCheckins() {
+        return state.weightCheckins.slice().sort(function (left, right) { return left.date.localeCompare(right.date); });
+      }
+
+      function formatWeightDate(date) {
+        var parts = String(date).split("-").map(Number);
+        if (parts.length !== 3) return date;
+        return new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", weekday: "short" }).format(new Date(parts[0], parts[1] - 1, parts[2], 12));
+      }
+
+      function renderWeightTrend() {
+        var entries = sortedWeightCheckins().slice(-14);
+        if (entries.length < 2) return "<div class=\"weight-trend-empty\"><b>体重趋势</b><span>完成至少 2 次打卡后显示变化曲线</span></div>";
+        var values = entries.map(function (entry) { return Number(entry.weight); });
+        var minimum = Math.min.apply(Math, values);
+        var maximum = Math.max.apply(Math, values);
+        var range = Math.max(.5, maximum - minimum);
+        var points = entries.map(function (entry, index) {
+          var x = 14 + index * (292 / Math.max(1, entries.length - 1));
+          var y = 76 - ((Number(entry.weight) - minimum) / range) * 52;
+          return { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, entry: entry };
+        });
+        var line = points.map(function (point) { return point.x + "," + point.y; }).join(" ");
+        var dots = points.map(function (point) { return "<circle cx=\"" + point.x + "\" cy=\"" + point.y + "\" r=\"3.5\"><title>" + escapeHtml(point.entry.date + " · " + point.entry.weight + " kg") + "</title></circle>"; }).join("");
+        var first = entries[0];
+        var latest = entries[entries.length - 1];
+        var change = Math.round((Number(latest.weight) - Number(first.weight)) * 10) / 10;
+        var changeLabel = (change > 0 ? "+" : "") + change + " kg";
+        return "<div class=\"weight-trend\"><div class=\"weight-trend-copy\"><div><b>最近 " + entries.length + " 次趋势</b><span>" + escapeHtml(first.date.slice(5)) + " → " + escapeHtml(latest.date.slice(5)) + "</span></div><strong class=\"" + (change > 0 ? "trend-up" : change < 0 ? "trend-down" : "") + "\">" + changeLabel + "</strong></div><svg viewBox=\"0 0 320 90\" role=\"img\" aria-label=\"最近体重变化曲线\"><path d=\"M14 76H306\" class=\"trend-axis\"></path><polyline points=\"" + line + "\" class=\"trend-line\"></polyline>" + dots + "</svg><div class=\"weight-trend-range\"><span>最低 " + minimum + " kg</span><span>最高 " + maximum + " kg</span></div></div>";
+      }
+
+      function renderSelectedWeightCheckin() {
+        var entry = weightCheckinForDate(selectedWeightDate);
+        if (!entry) {
+          return "<div class=\"weight-day-detail empty\"><div><b>" + escapeHtml(formatWeightDate(selectedWeightDate)) + "</b><p>这一天还没有体重照片记录。</p></div><button class=\"primary-button\" type=\"button\" onclick=\"openWeightCheckin('" + selectedWeightDate + "')\">＋ 添加打卡</button></div>";
+        }
+        return "<article class=\"weight-day-detail\"><div class=\"weight-photo-frame\"><div class=\"weight-photo-loading\">正在读取本地照片…</div><img id=\"weight-photo-" + escapeHtml(entry.id) + "\" data-photo-id=\"" + escapeHtml(entry.photoId) + "\" alt=\"" + escapeHtml(entry.date + " 的体重打卡照片") + "\"></div><div class=\"weight-day-copy\"><span>" + escapeHtml(formatWeightDate(entry.date)) + "</span><strong>" + entry.weight + " kg</strong>" + (entry.note ? "<p>" + escapeHtml(entry.note) + "</p>" : "<p>没有备注</p>") + "<div class=\"heading-actions\"><button class=\"soft-button\" type=\"button\" onclick=\"openWeightCheckin('" + entry.date + "')\">编辑</button><button class=\"danger-ghost-button\" type=\"button\" onclick=\"deleteWeightCheckin('" + entry.id + "')\">删除</button></div></div></article>";
+      }
+
+      function renderWeightCalendar() {
+        var year = weightCalendarCursor.getFullYear();
+        var month = weightCalendarCursor.getMonth();
+        var firstDay = new Date(year, month, 1);
+        var leading = (firstDay.getDay() + 6) % 7;
+        var dayCount = new Date(year, month + 1, 0).getDate();
+        var calendarCells = [];
+        for (var blank = 0; blank < leading; blank += 1) calendarCells.push("<span class=\"weight-calendar-empty\" aria-hidden=\"true\"></span>");
+        for (var day = 1; day <= dayCount; day += 1) {
+          var currentDate = dateKey(new Date(year, month, day, 12));
+          var checkin = weightCheckinForDate(currentDate);
+          var classes = ["weight-calendar-day"];
+          if (currentDate === dateKey()) classes.push("today");
+          if (currentDate === selectedWeightDate) classes.push("selected");
+          if (checkin) classes.push("checked");
+          calendarCells.push("<button class=\"" + classes.join(" ") + "\" type=\"button\" onclick=\"selectWeightDate('" + currentDate + "')\"><span>" + day + "</span>" + (checkin ? "<b>" + checkin.weight + "</b><i aria-label=\"已上传照片\">●</i>" : "<small>—</small>") + "</button>");
+        }
+        var entries = sortedWeightCheckins();
+        var latest = entries.length ? entries[entries.length - 1] : null;
+        var previous = entries.length > 1 ? entries[entries.length - 2] : null;
+        var latestChange = latest && previous ? Math.round((latest.weight - previous.weight) * 10) / 10 : null;
+        return "<section class=\"section panel weight-checkin-section\"><div class=\"section-heading\"><div><h3>体重照片日历</h3><p>按日期回看照片和体重变化，照片只保存在当前设备</p></div><button class=\"primary-button\" type=\"button\" onclick=\"openWeightCheckin('" + dateKey() + "')\">📷 今日打卡</button></div>" +
+          "<div class=\"weight-summary-grid\"><div><small>最新体重</small><strong>" + (latest ? latest.weight + " kg" : "—") + "</strong></div><div><small>较上次</small><strong>" + (latestChange == null ? "—" : (latestChange > 0 ? "+" : "") + latestChange + " kg") + "</strong></div><div><small>累计打卡</small><strong>" + entries.length + " 天</strong></div></div>" +
+          renderWeightTrend() +
+          "<div class=\"weight-calendar-toolbar\"><button type=\"button\" onclick=\"shiftWeightMonth(-1)\" aria-label=\"上个月\">‹</button><b>" + year + " 年 " + (month + 1) + " 月</b><button type=\"button\" onclick=\"shiftWeightMonth(1)\" aria-label=\"下个月\">›</button></div><div class=\"weight-calendar-weekdays\">" + ["一", "二", "三", "四", "五", "六", "日"].map(function (label) { return "<span>" + label + "</span>"; }).join("") + "</div><div class=\"weight-calendar-grid\">" + calendarCells.join("") + "</div>" + renderSelectedWeightCheckin() + "<div class=\"field-hint weight-storage-note\">照片经压缩后保存在浏览器的 IndexedDB 中，不会发送到 GitHub 或新闻服务。清除 Safari 网站数据会删除照片，请定期导出备份。</div></section>";
+      }
+
+      window.shiftWeightMonth = function (amount) {
+        weightCalendarCursor = new Date(weightCalendarCursor.getFullYear(), weightCalendarCursor.getMonth() + amount, 1);
+        selectedWeightDate = dateKey(weightCalendarCursor);
+        render();
+      };
+
+      window.selectWeightDate = function (date) {
+        selectedWeightDate = date;
+        render();
+        setTimeout(function () {
+          var detail = document.querySelector(".weight-day-detail");
+          if (detail) detail.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }, 60);
+      };
+
+      function releaseRenderedWeightPhotos() {
+        renderedWeightPhotoUrls.forEach(function (url) { URL.revokeObjectURL(url); });
+        renderedWeightPhotoUrls = [];
+      }
+
+      async function hydrateWeightPhotos() {
+        var images = Array.from(document.querySelectorAll("img[data-photo-id]"));
+        await Promise.all(images.map(async function (image) {
+          try {
+            var record = await mediaGet(image.dataset.photoId);
+            if (!record || !record.blob || !document.body.contains(image)) throw new Error("missing");
+            var url = URL.createObjectURL(record.blob);
+            renderedWeightPhotoUrls.push(url);
+            image.onload = function () {
+              image.classList.add("ready");
+              var loading = image.parentElement && image.parentElement.querySelector(".weight-photo-loading");
+              if (loading) loading.hidden = true;
+            };
+            image.src = url;
+          } catch (error) {
+            var loading = image.parentElement && image.parentElement.querySelector(".weight-photo-loading");
+            if (loading) loading.textContent = "照片在当前设备上不可用";
+          }
+        }));
+      }
+
       function renderFitness() {
         if (!state.profile) {
           return hero("FITNESS", "先认识你的身体", "建立轻量档案后，再由你亲自安排每周每天练什么。") +
@@ -584,6 +837,7 @@
           "<section class=\"section panel\"><div class=\"section-heading\"><div><h3>我的一周</h3><p>每天一个部位，也可以安排休息</p></div><button class=\"soft-button\" type=\"button\" onclick=\"openSchedule()\">修改周计划</button></div><div class=\"week-grid\">" + renderWeekSchedule() + "</div></section>" +
           "<section class=\"section two-column\"><div class=\"panel profile-summary\"><div class=\"profile-ring\">" + progress.rate + "%</div><div class=\"item-copy\"><p class=\"item-title\">今日完成 " + progress.complete + " / " + progress.total + " 组</p><div class=\"profile-facts\"><span class=\"chip\">🔥 连续 " + streak + " 天</span><span class=\"chip\">" + goalLabels[profile.goal] + "</span><span class=\"chip\">" + equipmentLabels[profile.equipment] + "</span></div></div></div>" +
           "<div class=\"panel\"><div class=\"kpi-top\"><div><p class=\"item-title\">Jackson 的训练档案</p><div class=\"item-meta\">" + profile.height + " cm · " + profile.weight + " kg → " + profile.targetWeight + " kg</div></div><button class=\"soft-button\" type=\"button\" onclick=\"openSetup()\">修改</button></div><div class=\"progress\"><span style=\"width:" + progress.rate + "%\"></span></div></div></section>" +
+          renderWeightCalendar() +
           "<div class=\"notice\">默认动作参考 <a href=\"https://www.acsm.org/wp-content/uploads/2026/03/Resistance-Training-Position-Stand-infographic.pdf\" target=\"_blank\" rel=\"noopener noreferrer\">ACSM 渐进训练指南</a>与 <a href=\"https://www.acefitness.org/resources/everyone/exercise-library/\" target=\"_blank\" rel=\"noopener noreferrer\">ACE 动作库</a>，但不构成医疗或个性化教练建议。重量不会按体重自动计算；第一次填写后会在相同动作中沿用。</div>" +
           "<section class=\"section\"><div class=\"section-heading\"><div><h3>今日动作</h3><p>按顺序勾选；再次点击最后完成的一组可回退</p></div><div class=\"heading-actions\">" + editorActions + "</div></div><div class=\"workout-list\">" + planBody + "</div></section>";
       }
@@ -911,10 +1165,12 @@
         document.getElementById("pageSubtitle").textContent = meta.subtitle;
         renderNav();
         var content = document.getElementById("content");
+        releaseRenderedWeightPhotos();
         if (state.active === "fitness") content.innerHTML = renderFitness();
         else if (state.active === "finance") content.innerHTML = renderFinance();
         else if (state.active === "todo") content.innerHTML = renderTodo();
         else content.innerHTML = renderOverview();
+        if (state.active === "fitness") setTimeout(hydrateWeightPhotos, 0);
       }
 
       document.getElementById("profileForm").addEventListener("submit", function (event) {
@@ -998,34 +1254,217 @@
         showToast("动作已保存");
       });
 
+      function clearWeightPreview() {
+        if (weightPreviewUrl) URL.revokeObjectURL(weightPreviewUrl);
+        weightPreviewUrl = null;
+        var preview = document.getElementById("weightPhotoPreview");
+        var image = document.getElementById("weightPhotoPreviewImage");
+        if (image) image.removeAttribute("src");
+        if (preview) preview.hidden = true;
+      }
+
+      async function showWeightPreview(blob) {
+        clearWeightPreview();
+        weightPreviewUrl = URL.createObjectURL(blob);
+        document.getElementById("weightPhotoPreviewImage").src = weightPreviewUrl;
+        document.getElementById("weightPhotoPreview").hidden = false;
+      }
+
+      window.openWeightCheckin = async function (date) {
+        var checkinDate = date || dateKey();
+        var entry = weightCheckinForDate(checkinDate);
+        var form = document.getElementById("weightForm");
+        form.reset();
+        clearWeightPreview();
+        document.getElementById("weightCheckinId").value = entry ? entry.id : "";
+        document.getElementById("weightDate").value = checkinDate;
+        document.getElementById("weightValue").value = entry ? entry.weight : "";
+        document.getElementById("weightNote").value = entry ? entry.note || "" : "";
+        document.getElementById("weightCheckinTitle").textContent = entry ? "编辑体重照片打卡" : "体重照片打卡";
+        document.getElementById("weightPhotoHint").textContent = entry ? "不重新选择照片会保留原照片；选择新照片会替换。" : "新打卡必须选择照片。系统会在本机压缩后保存，不会上传到服务器。";
+        document.getElementById("weightBackdrop").hidden = false;
+        if (entry) {
+          try {
+            var record = await mediaGet(entry.photoId);
+            if (record && record.blob && !document.getElementById("weightBackdrop").hidden) await showWeightPreview(record.blob);
+          } catch (error) {
+            document.getElementById("weightPhotoHint").textContent = "当前设备找不到原照片，请重新选择一张后保存。";
+          }
+        }
+      };
+
+      window.closeWeightCheckin = function () {
+        document.getElementById("weightBackdrop").hidden = true;
+        document.getElementById("weightForm").reset();
+        clearWeightPreview();
+      };
+
+      window.openTodayWeightCheckin = function () {
+        document.getElementById("celebrationBackdrop").hidden = true;
+        state.active = "fitness";
+        saveState();
+        render();
+        openWeightCheckin(dateKey());
+      };
+
+      document.getElementById("weightPhoto").addEventListener("change", function (event) {
+        var file = event.target.files && event.target.files[0];
+        if (!file) {
+          clearWeightPreview();
+          return;
+        }
+        if (!/^image\//i.test(file.type || "")) {
+          showToast("请选择照片文件");
+          event.target.value = "";
+          return;
+        }
+        showWeightPreview(file);
+      });
+
+      document.getElementById("weightForm").addEventListener("submit", async function (event) {
+        event.preventDefault();
+        var form = event.currentTarget;
+        var data = new FormData(form);
+        var id = String(data.get("id") || "");
+        var existingIndex = state.weightCheckins.findIndex(function (entry) { return entry.id === id; });
+        var existing = existingIndex >= 0 ? state.weightCheckins[existingIndex] : null;
+        var checkinDate = String(data.get("date") || "");
+        var checkinWeight = Math.round(Number(data.get("weight")) * 10) / 10;
+        var collision = state.weightCheckins.find(function (entry) { return entry.date === checkinDate && entry.id !== id; });
+        var photoFile = document.getElementById("weightPhoto").files[0];
+        var submitButton = document.getElementById("weightSubmitButton");
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(checkinDate)) {
+          showToast("请选择有效日期");
+          return;
+        }
+        if (!Number.isFinite(checkinWeight) || checkinWeight < 20 || checkinWeight > 400) {
+          showToast("请填写有效体重");
+          return;
+        }
+        if (collision) {
+          showToast("这一天已经有打卡，请先编辑或删除原记录");
+          return;
+        }
+        if (!photoFile && !existing) {
+          showToast("请先选择一张体重照片");
+          return;
+        }
+        submitButton.disabled = true;
+        submitButton.textContent = photoFile ? "正在压缩照片…" : "正在保存…";
+        try {
+          var photoId = existing ? existing.photoId : uid("weight-photo");
+          if (photoFile) {
+            var compressed = await compressPhoto(photoFile);
+            await mediaWrite({ id: photoId, blob: compressed, type: compressed.type || photoFile.type, updatedAt: Date.now() });
+          } else {
+            var oldPhoto = await mediaGet(photoId);
+            if (!oldPhoto || !oldPhoto.blob) throw new Error("原照片不存在，请重新选择照片");
+          }
+          var entry = {
+            id: existing ? existing.id : uid("weight"),
+            date: checkinDate,
+            weight: checkinWeight,
+            note: String(data.get("note") || "").trim().slice(0, 80),
+            photoId: photoId,
+            createdAt: existing ? existing.createdAt : Date.now(),
+            updatedAt: Date.now()
+          };
+          if (existingIndex >= 0) state.weightCheckins[existingIndex] = entry;
+          else state.weightCheckins.push(entry);
+          state.weightCheckins.sort(function (left, right) { return left.date.localeCompare(right.date); });
+          selectedWeightDate = checkinDate;
+          var dateParts = checkinDate.split("-").map(Number);
+          weightCalendarCursor = new Date(dateParts[0], dateParts[1] - 1, 1);
+          saveState();
+          closeWeightCheckin();
+          render();
+          showToast(existing ? "体重打卡已更新" : "今日体重照片已保存");
+        } catch (error) {
+          showToast(error && error.message ? error.message : "照片保存失败，请重试");
+        } finally {
+          submitButton.disabled = false;
+          submitButton.textContent = "保存打卡";
+        }
+      });
+
+      window.deleteWeightCheckin = async function (id) {
+        var index = state.weightCheckins.findIndex(function (entry) { return entry.id === id; });
+        if (index < 0 || !window.confirm("删除这一天的体重和照片记录？此操作无法撤销。")) return;
+        var entry = state.weightCheckins[index];
+        try {
+          await mediaDelete(entry.photoId);
+          state.weightCheckins.splice(index, 1);
+          saveState();
+          render();
+          showToast("体重照片记录已删除");
+        } catch (error) {
+          showToast("删除失败，请重试");
+        }
+      };
+
       window.openDataModal = function () { document.getElementById("dataBackdrop").hidden = false; };
       window.closeDataModal = function () { document.getElementById("dataBackdrop").hidden = true; };
 
-      window.exportData = function () {
-        var blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
-        var url = URL.createObjectURL(blob);
-        var link = document.createElement("a");
-        link.href = url;
-        link.download = "jackson-workbench-backup-" + dateKey() + ".json";
-        link.click();
-        URL.revokeObjectURL(url);
-        showToast("备份已导出");
+      window.exportData = async function () {
+        try {
+          var photos = await mediaGetAll();
+          var exportedPhotos = await Promise.all(photos.map(async function (record) {
+            return { id: record.id, type: record.type || record.blob.type || "image/jpeg", dataUrl: await blobToDataUrl(record.blob), updatedAt: record.updatedAt || Date.now() };
+          }));
+          var payload = {
+            schema: "jackson-workbench-backup",
+            version: "1.3",
+            exportedAt: new Date().toISOString(),
+            state: state,
+            media: { weightPhotos: exportedPhotos }
+          };
+          var blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+          var url = URL.createObjectURL(blob);
+          var link = document.createElement("a");
+          link.href = url;
+          link.download = "jackson-workbench-backup-" + dateKey() + ".json";
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+          showToast("备份已导出，已包含 " + exportedPhotos.length + " 张体重照片");
+        } catch (error) {
+          showToast("导出失败：无法读取本地照片");
+        }
       };
 
       document.getElementById("importFile").addEventListener("change", function (event) {
         var file = event.target.files && event.target.files[0];
         if (!file) return;
         var reader = new FileReader();
-        reader.onload = function () {
+        reader.onload = async function () {
           try {
-            var incoming = JSON.parse(reader.result);
+            var payload = JSON.parse(reader.result);
+            var incoming = payload && payload.state ? payload.state : payload;
             if (!incoming || !Array.isArray(incoming.tasks) || !incoming.workout) throw new Error("invalid");
+            var importedPhotos = payload && payload.media && Array.isArray(payload.media.weightPhotos) ? payload.media.weightPhotos : [];
+            var preparedPhotos = importedPhotos.map(function (photo) {
+              if (!photo || typeof photo.id !== "string" || typeof photo.dataUrl !== "string") throw new Error("invalid-photo");
+              var photoBlob = dataUrlToBlob(photo.dataUrl);
+              return { id: photo.id, blob: photoBlob, type: photo.type || photoBlob.type, updatedAt: Number(photo.updatedAt) || Date.now() };
+            });
+            var previousPhotos = await mediaGetAll();
+            try {
+              await mediaClear();
+              for (var index = 0; index < preparedPhotos.length; index += 1) await mediaWrite(preparedPhotos[index]);
+            } catch (mediaError) {
+              try {
+                await mediaClear();
+                for (var restoreIndex = 0; restoreIndex < previousPhotos.length; restoreIndex += 1) await mediaWrite(previousPhotos[restoreIndex]);
+              } catch (restoreError) {}
+              throw mediaError;
+            }
             localStorage.setItem(STORAGE_KEY, JSON.stringify(incoming));
             state = loadState();
             applyTheme();
             closeDataModal();
             render();
-            showToast("备份已导入");
+            showToast("备份已导入，共恢复 " + importedPhotos.length + " 张体重照片");
           } catch (error) {
             showToast("无法导入：文件格式不正确");
           }
@@ -1034,8 +1473,9 @@
         reader.readAsText(file);
       });
 
-      window.resetData = function () {
+      window.resetData = async function () {
         if (!window.confirm("确认清除全部本地数据？建议先导出备份。")) return;
+        try { await mediaClear(); } catch (error) {}
         localStorage.removeItem(STORAGE_KEY);
         state = createDefaultState();
         saveState();
@@ -1056,6 +1496,7 @@
           closeSchedule();
           closeTrainingEditor();
           closeExerciseEditor();
+          closeWeightCheckin();
           document.getElementById("celebrationBackdrop").hidden = true;
         }
       });

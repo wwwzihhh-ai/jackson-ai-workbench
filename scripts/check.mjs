@@ -59,7 +59,13 @@ if (!styles.includes("--sidebar-width") || !styles.includes("linear-gradient")) 
   throw new Error("侧栏缺少全页绿色背景或响应式宽度配置");
 }
 if (!app.includes('jackson.ai.workbench.v1.1') || !app.includes("weekSchedule") || !app.includes("lastWeights")) {
-  throw new Error("V1.2 数据迁移字段或原 localStorage 标识缺失");
+  throw new Error("训练数据迁移字段或原 localStorage 标识缺失");
+}
+if (!app.includes('version: "1.3"') || !app.includes("weightCheckins") || !app.includes("indexedDB.open") || !html.includes("weightForm")) {
+  throw new Error("V1.3 体重照片日历、IndexedDB 或打卡表单缺失");
+}
+if (!serviceWorker.includes("jackson-workbench-v1.3.0") || !html.includes("v=1.3.0")) {
+  throw new Error("PWA 缓存或页面资源版本尚未升级到 V1.3");
 }
 if (!workflow.includes("schedule:") || !workflow.includes("scripts/fetch-news.mjs")) {
   throw new Error("GitHub Actions 缺少定时新闻刷新配置");
@@ -73,4 +79,4 @@ if (/(?:api[_-]?key|password|secret|token)\s*[:=]\s*["'][^"']{8,}["']/i.test(pro
   throw new Error("生产代码中疑似存在硬编码敏感信息");
 }
 
-console.log("Check complete: JavaScript、PWA、V1.2 数据迁移、新闻工作流和 iPhone 配置均通过。");
+console.log("Check complete: JavaScript、PWA、V1.3 体重照片日历、数据迁移和 iPhone 配置均通过。");

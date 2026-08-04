@@ -1,7 +1,7 @@
 {
   "name": "Jackson 工作台",
   "short_name": "Jackson",
-  "description": "Jackson 的个人工作台：自定义训练、准实时财经新闻和今日待办。",
+  "description": "Jackson 的个人工作台：自定义训练、体重照片日历、财经新闻和今日待办。",
   "lang": "zh-CN",
   "start_url": "./",
   "scope": "./",
