@@ -16,7 +16,8 @@
       --orange: #ef8b24;
       --yellow: #ffad18;
       --shadow: 0 14px 40px rgba(29, 68, 49, .09);
-      --sidebar-width: 236px;
+      --sidebar-expanded-width: 236px;
+      --sidebar-current-width: var(--sidebar-expanded-width);
     }
 
     html[data-theme="dark"] {
@@ -76,13 +77,19 @@
       min-height: 100dvh;
       margin: 0 auto;
       display: grid;
-      grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
-      background: linear-gradient(90deg, var(--sidebar) 0 var(--sidebar-width), var(--bg) var(--sidebar-width));
+      grid-template-columns: var(--sidebar-current-width) minmax(0, 1fr);
+      background: linear-gradient(90deg, var(--sidebar) 0 var(--sidebar-current-width), var(--bg) var(--sidebar-current-width));
+      transition: grid-template-columns .22s ease;
+    }
+    .app-shell.sidebar-collapsed {
+      --sidebar-current-width: 0px;
+      background: var(--bg);
     }
 
     .sidebar {
       position: sticky;
       top: 0;
+      width: var(--sidebar-expanded-width);
       height: 100vh;
       height: 100dvh;
       display: flex;
@@ -93,6 +100,14 @@
         radial-gradient(circle at 35% 10%, rgba(104, 203, 158, .18), transparent 24%),
         linear-gradient(180deg, var(--sidebar-2), var(--sidebar));
       border-right: 1px solid rgba(255,255,255,.06);
+      transform: translateX(0);
+      opacity: 1;
+      transition: transform .22s ease, opacity .16s ease;
+    }
+    .sidebar-collapsed .sidebar {
+      pointer-events: none;
+      transform: translateX(-100%);
+      opacity: 0;
     }
 
     .brand {
@@ -184,6 +199,53 @@
       -webkit-backdrop-filter: blur(18px);
       backdrop-filter: blur(18px);
       border-bottom: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
+      transition: padding-left .22s ease;
+    }
+    .sidebar-toggle {
+      position: fixed;
+      z-index: 42;
+      top: max(14px, calc(env(safe-area-inset-top) + 8px));
+      left: calc(max(0px, (100vw - 1440px) / 2) + var(--sidebar-current-width) - 22px);
+      width: 44px;
+      height: 44px;
+      min-width: 44px;
+      min-height: 44px;
+      display: grid;
+      place-items: center;
+      padding: 0;
+      border: 1px solid rgba(255,255,255,.3);
+      border-radius: 14px;
+      color: #fff;
+      background: rgba(36, 84, 59, .94);
+      box-shadow: 0 8px 24px rgba(12, 45, 29, .2);
+      -webkit-backdrop-filter: blur(14px);
+      backdrop-filter: blur(14px);
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: left .22s ease, transform .15s ease, background .15s ease, box-shadow .15s ease;
+    }
+    .sidebar-toggle:hover { transform: translateY(-1px); background: var(--sidebar-2); }
+    .sidebar-toggle:active { transform: translateY(0) scale(.97); }
+    .sidebar-toggle-icon {
+      width: 22px;
+      height: 22px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .sidebar-toggle-icon-expand { display: none; }
+    .sidebar-collapsed .sidebar-toggle {
+      left: max(calc(env(safe-area-inset-left) + 12px), calc((100vw - 1440px) / 2 + 12px));
+      color: #fff;
+      background: var(--sidebar);
+      border-color: rgba(255,255,255,.16);
+    }
+    .sidebar-collapsed .sidebar-toggle-icon-collapse { display: none; }
+    .sidebar-collapsed .sidebar-toggle-icon-expand { display: block; }
+    .sidebar-collapsed .topbar {
+      padding-left: max(72px, calc(env(safe-area-inset-left) + 68px));
     }
     .topbar-title { min-width: 0; }
     .topbar-title strong { display: block; font-size: 18px; }
@@ -621,9 +683,9 @@
     .timer-bar {
       position: fixed;
       z-index: 70;
-      left: calc(236px + (100vw - 236px) / 2);
+      left: calc(var(--sidebar-current-width) + (100vw - var(--sidebar-current-width)) / 2);
       bottom: max(18px, env(safe-area-inset-bottom));
-      width: min(470px, calc(100vw - 276px));
+      width: min(470px, calc(100vw - var(--sidebar-current-width) - 40px));
       transform: translateX(-50%);
       display: flex;
       align-items: center;
@@ -655,7 +717,7 @@
     }
 
     @media (max-width: 900px) {
-      :root { --sidebar-width: 124px; }
+      :root { --sidebar-expanded-width: 124px; }
       .brand { padding: 25px 10px 17px; }
       .brand-mark { width: 54px; height: 54px; border-radius: 19px; font-size: 23px; }
       .brand h1 { font-size: 13px; }
@@ -666,15 +728,15 @@
       .sort-controls { margin: 2px 0 0; }
       .sort-hint { margin: 8px; font-size: 10px; }
       .two-column { grid-template-columns: 1fr; }
-      .timer-bar { left: calc(124px + (100vw - 124px) / 2); width: min(470px, calc(100vw - 150px)); }
+      .timer-bar { width: min(470px, calc(100vw - var(--sidebar-current-width) - 26px)); }
       .todo-form { grid-template-columns: 1fr 1fr; }
       .todo-form .task-title-field { grid-column: 1 / -1; }
     }
 
     @media (max-width: 720px) {
-      :root { --sidebar-width: 104px; }
+      :root { --sidebar-expanded-width: 104px; }
       .sidebar-footer { padding-inline: 5px; }
-      .topbar { min-height: 64px; padding: 11px 14px; }
+      .topbar { min-height: 64px; gap: 8px; padding: 11px 10px 11px 38px; }
       .topbar-title strong { font-size: 15px; }
       .topbar-title span { display: none; }
       .icon-button { width: 38px; height: 38px; }
@@ -690,7 +752,7 @@
       .todo-form .task-title-field { grid-column: auto; }
       .form-grid { grid-template-columns: 1fr; }
       .form-group.full { grid-column: auto; }
-      .timer-bar { left: calc(104px + (100vw - 104px) / 2); width: calc(100vw - 120px); gap: 8px; }
+      .timer-bar { width: calc(100vw - var(--sidebar-current-width) - 16px); gap: 8px; }
       .timer-copy { display: none; }
       .news-card { align-items: flex-start; }
       .week-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -744,6 +806,9 @@
           padding-top: max(11px, env(safe-area-inset-top));
           padding-right: max(14px, env(safe-area-inset-right));
         }
+        .sidebar-collapsed .topbar {
+          padding-left: max(68px, calc(env(safe-area-inset-left) + 64px));
+        }
       }
     }
 
@@ -752,4 +817,9 @@
         min-height: 44px;
       }
       button { min-width: 44px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .app-shell, .sidebar, .sidebar-toggle, .topbar { transition: none; }
     }

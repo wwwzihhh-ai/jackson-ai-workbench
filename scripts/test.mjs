@@ -36,6 +36,7 @@ try {
   const news = await newsResponse.json();
 
   if (!homeText.includes("Jackson 工作台")) throw new Error("首页内容不正确");
+  if (!homeText.includes('id="sidebarToggle"') || !homeText.includes('aria-controls="primarySidebar"')) throw new Error("侧栏折叠控件不可用");
   if (manifest.display !== "standalone") throw new Error("manifest 未启用 standalone");
   if (!worker.ok || !icon.ok) throw new Error("PWA 静态资源无法访问");
   if (!Array.isArray(news.items) || news.refreshMinutes !== 30) throw new Error("新闻数据文件不可用");

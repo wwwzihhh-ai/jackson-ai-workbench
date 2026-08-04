@@ -15,6 +15,7 @@
       var taskFormOpen = false;
       var longPressTimer = null;
       var longPressTriggered = false;
+      var sidebarToggleLocked = false;
       var restTimer = null;
       var restRemaining = 0;
       var trainingPartOrder = ["chest", "shoulders", "back", "arms", "legs", "core", "cardio"];
@@ -105,9 +106,10 @@
       function createDefaultState() {
         var today = dateKey();
         return {
-          version: "1.3",
+          version: "1.3.1",
           active: "overview",
           theme: "system",
+          sidebarCollapsed: false,
           sortMode: false,
           navOrder: ["overview", "fitness", "finance", "todo"],
           profile: null,
@@ -174,7 +176,8 @@
               updatedAt: Number(entry.updatedAt) || Number(entry.createdAt) || Date.now()
             };
           }).sort(function (left, right) { return left.date.localeCompare(right.date); }) : [];
-          next.version = "1.3";
+          next.version = "1.3.1";
+          next.sidebarCollapsed = saved.sidebarCollapsed === true;
           next.tasks = Array.isArray(saved.tasks) ? saved.tasks : base.tasks;
           next.navOrder = Array.isArray(saved.navOrder) ? saved.navOrder.filter(function (id) { return knownModules.indexOf(id) >= 0; }) : base.navOrder;
           knownModules.forEach(function (id) { if (next.navOrder.indexOf(id) < 0) next.navOrder.push(id); });
@@ -355,6 +358,28 @@
         saveState();
         applyTheme();
         showToast("已切换为" + ({ system: "跟随系统", light: "浅色主题", dark: "深色主题" })[state.theme]);
+      }
+
+      function applySidebarState() {
+        var collapsed = state.sidebarCollapsed === true;
+        var shell = document.querySelector(".app-shell");
+        var sidebar = document.getElementById("primarySidebar");
+        var button = document.getElementById("sidebarToggle");
+        shell.classList.toggle("sidebar-collapsed", collapsed);
+        sidebar.setAttribute("aria-hidden", String(collapsed));
+        sidebar.toggleAttribute("inert", collapsed);
+        button.setAttribute("aria-expanded", String(!collapsed));
+        button.setAttribute("aria-label", collapsed ? "展开任务栏" : "收起任务栏");
+        button.title = collapsed ? "展开任务栏" : "收起任务栏";
+      }
+
+      function toggleSidebar() {
+        if (sidebarToggleLocked) return;
+        sidebarToggleLocked = true;
+        state.sidebarCollapsed = !state.sidebarCollapsed;
+        saveState();
+        applySidebarState();
+        window.setTimeout(function () { sidebarToggleLocked = false; }, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 240);
       }
 
       function renderNav() {
@@ -1161,6 +1186,7 @@
 
       function render() {
         var meta = moduleMeta[state.active];
+        applySidebarState();
         document.getElementById("pageTitle").textContent = meta.label;
         document.getElementById("pageSubtitle").textContent = meta.subtitle;
         renderNav();
@@ -1413,7 +1439,7 @@
           }));
           var payload = {
             schema: "jackson-workbench-backup",
-            version: "1.3",
+            version: "1.3.1",
             exportedAt: new Date().toISOString(),
             state: state,
             media: { weightPhotos: exportedPhotos }
@@ -1487,6 +1513,7 @@
 
       document.getElementById("themeButton").addEventListener("click", cycleTheme);
       document.getElementById("dataButton").addEventListener("click", openDataModal);
+      document.getElementById("sidebarToggle").addEventListener("click", toggleSidebar);
       document.getElementById("footerDate").textContent = dateKey().replace(/-/g, "/");
       window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () { if (state.theme === "system") applyTheme(); });
       document.addEventListener("keydown", function (event) {
