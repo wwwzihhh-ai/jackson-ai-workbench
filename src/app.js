@@ -16,6 +16,8 @@
       var longPressTimer = null;
       var longPressTriggered = false;
       var sidebarToggleLocked = false;
+      var sidebarGesture = null;
+      var dailyQuoteLoading = false;
       var restTimer = null;
       var restRemaining = 0;
       var trainingPartOrder = ["chest", "shoulders", "back", "arms", "legs", "core", "cardio"];
@@ -39,6 +41,34 @@
       var selectedWeightDate = dateKey();
       var weightPreviewUrl = null;
       var renderedWeightPhotoUrls = [];
+      var DAILY_QUOTE_API = "https://v1.hitokoto.cn/?c=d&c=e&c=i&c=k&encode=json&max_length=30";
+      var dailyQuoteFallbacks = [
+        "慢一点也没关系，你仍然在向前走。",
+        "照顾好自己，是今天最重要的小事。",
+        "把今天过好，明天自然会有新的答案。",
+        "不必一下子很厉害，先让自己每天前进一点。",
+        "愿你有坚定的方向，也有松弛的心情。",
+        "今天认真生活的你，已经很值得肯定。",
+        "允许自己休息，也别忘了重新出发。",
+        "把注意力放回当下，完成眼前这一小步。",
+        "你积累的每一点努力，都在悄悄塑造未来。",
+        "生活不必时刻满分，真诚投入就很好。",
+        "保持耐心，真正的改变往往安静地发生。",
+        "愿你今天有行动，也有属于自己的从容。"
+      ];
+      var fitnessMotivations = {
+        chest: ["稳住肩胛，推起的不只是重量，也是今天的状态。", "每一次稳定发力，都在让胸部训练更扎实。"],
+        shoulders: ["肩部训练不求借力，控制住每一厘米才算进步。", "轻一点、稳一点，让肩膀记住正确的轨迹。"],
+        back: ["先把肩胛放稳，再把重量拉向自己。", "看不见的背部，也值得你认真练好每一下。"],
+        arms: ["控制离心，别急着完成，让每一次弯举都算数。", "手臂会酸，但动作依然可以保持漂亮。"],
+        legs: ["腿部训练很难，但你只需要专注完成下一组。", "脚下站稳，呼吸跟上，力量会一点点回来。"],
+        core: ["收紧核心、保持呼吸，稳定本身就是力量。", "动作幅度不必大，控制得住才是真本事。"],
+        cardio: ["不用追赶别人，找到今天能持续的节奏。", "每一分钟的坚持，都在为身体增加余量。"],
+        rest: ["恢复不是停下，而是在为下一次训练蓄力。", "今天好好休息，明天才能更有质量地出发。"],
+        legacy: ["重量由你掌控，动作质量永远排在第一位。"]
+      };
+      var exerciseCompletionMotivations = ["这一项稳稳拿下。", "动作完成，继续保持自己的节奏。", "很好，把这份专注带到下一个动作。", "今天的进步，又多了清楚的一笔。"];
+      var workoutCompletionMotivations = ["真正有效的进步，来自一次次认真完成。", "今天答应自己的事，你做到了。", "训练结束，身体会记住你的坚持。", "辛苦了，现在放心去恢复。"];
 
       function exerciseTemplate(id, part, name, equipment, sets, reps, rest, art, kind, note) {
         return { id: id, part: part, kind: kind || "strength", name: name, equipment: equipment, sets: sets, reps: reps, rest: rest, weight: null, note: note || "", art: art };
@@ -106,10 +136,11 @@
       function createDefaultState() {
         var today = dateKey();
         return {
-          version: "1.3.1",
+          version: "1.3.2",
           active: "overview",
           theme: "system",
           sidebarCollapsed: false,
+          dailyQuote: null,
           sortMode: false,
           navOrder: ["overview", "fitness", "finance", "todo"],
           profile: null,
@@ -176,7 +207,18 @@
               updatedAt: Number(entry.updatedAt) || Number(entry.createdAt) || Date.now()
             };
           }).sort(function (left, right) { return left.date.localeCompare(right.date); }) : [];
-          next.version = "1.3.1";
+          var savedQuote = saved.dailyQuote;
+          var savedQuoteText = savedQuote && typeof savedQuote.text === "string" ? savedQuote.text.trim() : "";
+          next.dailyQuote = savedQuote && /^\d{4}-\d{2}-\d{2}$/.test(savedQuote.date || "") && savedQuoteText.length >= 2 && savedQuoteText.length <= 30 && !/[\u0000-\u001f]/.test(savedQuoteText)
+            ? {
+                date: savedQuote.date,
+                text: savedQuoteText,
+                from: String(savedQuote.from || "").trim().slice(0, 40),
+                fromWho: String(savedQuote.fromWho || "").trim().slice(0, 40),
+                source: savedQuote.source === "api" ? "api" : "fallback"
+              }
+            : null;
+          next.version = "1.3.2";
           next.sidebarCollapsed = saved.sidebarCollapsed === true;
           next.tasks = Array.isArray(saved.tasks) ? saved.tasks : base.tasks;
           next.navOrder = Array.isArray(saved.navOrder) ? saved.navOrder.filter(function (id) { return knownModules.indexOf(id) >= 0; }) : base.navOrder;
@@ -373,13 +415,45 @@
         button.title = collapsed ? "展开任务栏" : "收起任务栏";
       }
 
-      function toggleSidebar() {
-        if (sidebarToggleLocked) return;
+      function setSidebarCollapsed(collapsed) {
+        if (sidebarToggleLocked || state.sidebarCollapsed === collapsed) return;
         sidebarToggleLocked = true;
-        state.sidebarCollapsed = !state.sidebarCollapsed;
+        state.sidebarCollapsed = collapsed;
         saveState();
         applySidebarState();
         window.setTimeout(function () { sidebarToggleLocked = false; }, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 240);
+      }
+
+      function toggleSidebar() {
+        setSidebarCollapsed(!state.sidebarCollapsed);
+      }
+
+      function sidebarGestureIsBlocked(target) {
+        if (document.querySelector(".modal-backdrop:not([hidden])")) return true;
+        return !(target instanceof Element) || Boolean(target.closest("button, a, input, select, textarea, label, [contenteditable='true'], [role='dialog'], .timer-bar"));
+      }
+
+      function startSidebarGesture(event) {
+        if (!event.isPrimary || event.pointerType !== "touch" || sidebarGestureIsBlocked(event.target)) return;
+        sidebarGesture = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY
+        };
+      }
+
+      function finishSidebarGesture(event) {
+        if (!sidebarGesture || event.pointerId !== sidebarGesture.pointerId) return;
+        var deltaX = event.clientX - sidebarGesture.startX;
+        var deltaY = event.clientY - sidebarGesture.startY;
+        sidebarGesture = null;
+        if (Math.abs(deltaX) < 56 || Math.abs(deltaX) < Math.abs(deltaY) * 1.35) return;
+        if (deltaX > 0 && state.sidebarCollapsed) setSidebarCollapsed(false);
+        else if (deltaX < 0 && !state.sidebarCollapsed) setSidebarCollapsed(true);
+      }
+
+      function cancelSidebarGesture(event) {
+        if (!sidebarGesture || event.pointerId === sidebarGesture.pointerId) sidebarGesture = null;
       }
 
       function renderNav() {
@@ -467,8 +541,69 @@
         return "晚上好";
       }
 
-      function hero(kicker, title, copy) {
-        return "<section class=\"hero\"><p class=\"hero-kicker\">" + escapeHtml(kicker) + "</p><h2>" + escapeHtml(title) + "</h2><p>" + escapeHtml(copy) + "</p></section>";
+      function seededIndex(seed, length) {
+        var hash = 0;
+        for (var index = 0; index < seed.length; index += 1) hash = ((hash << 5) - hash + seed.charCodeAt(index)) | 0;
+        return Math.abs(hash) % length;
+      }
+
+      function fallbackQuoteForDate(date) {
+        return {
+          date: date,
+          text: dailyQuoteFallbacks[seededIndex(date, dailyQuoteFallbacks.length)],
+          from: "Jackson 每日一句",
+          fromWho: "",
+          source: "fallback"
+        };
+      }
+
+      function dailyQuoteForToday() {
+        var today = dateKey();
+        return state.dailyQuote && state.dailyQuote.date === today ? state.dailyQuote : fallbackQuoteForDate(today);
+      }
+
+      function quoteAttribution(quote) {
+        if (quote.fromWho && quote.from) return "— " + quote.fromWho + " · " + quote.from;
+        if (quote.fromWho || quote.from) return "— " + (quote.fromWho || quote.from);
+        return "";
+      }
+
+      function fitnessMotivationFor(part, salt) {
+        var list = fitnessMotivations[part] || fitnessMotivations.legacy;
+        return list[seededIndex(dateKey() + "-" + part + "-" + (salt || "hero"), list.length)];
+      }
+
+      async function loadDailyQuote() {
+        var today = dateKey();
+        if (dailyQuoteLoading || (state.dailyQuote && state.dailyQuote.date === today)) return;
+        dailyQuoteLoading = true;
+        var controller = new AbortController();
+        var timeout = window.setTimeout(function () { controller.abort(); }, 4500);
+        try {
+          var response = await fetch(DAILY_QUOTE_API, { signal: controller.signal, cache: "no-store" });
+          if (!response.ok) throw new Error("quote-http");
+          var data = await response.json();
+          var text = String(data && data.hitokoto || "").trim();
+          if (text.length < 2 || text.length > 30 || /[\u0000-\u001f]/.test(text)) throw new Error("quote-invalid");
+          state.dailyQuote = {
+            date: today,
+            text: text,
+            from: String(data.from || "").trim().slice(0, 40),
+            fromWho: String(data.from_who || "").trim().slice(0, 40),
+            source: "api"
+          };
+        } catch (error) {
+          state.dailyQuote = fallbackQuoteForDate(today);
+        } finally {
+          window.clearTimeout(timeout);
+          dailyQuoteLoading = false;
+          saveState();
+          if (state.active === "overview") render();
+        }
+      }
+
+      function hero(kicker, title, copy, attribution) {
+        return "<section class=\"hero\"><p class=\"hero-kicker\">" + escapeHtml(kicker) + "</p><h2>" + escapeHtml(title) + "</h2><p>" + escapeHtml(copy) + "</p>" + (attribution ? "<small class=\"hero-attribution\">" + escapeHtml(attribution) + "</small>" : "") + "</section>";
       }
 
       function pendingTasks() {
@@ -513,6 +648,7 @@
         var priority = pendingTasks().slice().sort(sortTasks).slice(0, 5);
         var profileAction = state.profile ? "查看今日计划" : "建立训练档案";
         var profileClick = state.profile ? "setActive('fitness')" : "openSetup()";
+        var dailyQuote = dailyQuoteForToday();
 
         var priorityHtml = priority.length ? priority.map(function (task, index) {
           return "<div class=\"action-item\"><span class=\"action-index " + (index < 3 ? "rank-" + (index + 1) : "") + "\">" + (index + 1) + "</span><div class=\"item-copy\"><p class=\"item-title\">" + escapeHtml(task.title) + "</p><div class=\"item-meta\">" + escapeHtml(task.category) + " · " + priorityLabel(task.priority) + "优先级</div></div><button class=\"text-link\" type=\"button\" onclick=\"toggleTask('" + task.id + "')\">完成</button></div>";
@@ -523,7 +659,7 @@
           return item.url ? "<a class=\"action-item action-link\" href=\"" + escapeHtml(item.url) + "\" target=\"_blank\" rel=\"noopener noreferrer\">" + body + "</a>" : "<div class=\"action-item\">" + body + "</div>";
         }).join("");
 
-        return hero(formatLongDate(), greeting() + "，Jackson", "今天不用面面俱到：照顾身体、看清重要信息，然后完成最关键的几件事。") +
+        return hero(formatLongDate(), greeting() + "，Jackson", "“" + dailyQuote.text + "”", quoteAttribution(dailyQuote)) +
           "<section class=\"kpi-grid\">" +
             "<article class=\"kpi-card\"><div class=\"kpi-top\"><span class=\"kpi-icon\">💪</span><small>本周健身</small></div><div class=\"kpi-value\">" + weekDone + " / " + (trainingGoal || "—") + " 次</div><button class=\"text-link\" type=\"button\" onclick=\"" + profileClick + "\">" + profileAction + " →</button><div class=\"progress\"><span style=\"width:" + trainingRate + "%\"></span></div></article>" +
             "<article class=\"kpi-card\"><div class=\"kpi-top\"><span class=\"kpi-icon\">📈</span><small>财经观察</small></div><div class=\"kpi-value\">" + dailyNews.length + " 条</div><button class=\"text-link\" type=\"button\" onclick=\"setActive('finance')\">查看最新新闻 →</button><div class=\"progress\"><span style=\"width:100%\"></span></div></article>" +
@@ -548,9 +684,11 @@
         var exerciseIndex = plan.findIndex(function (item) { return item.id === id; });
         if (exerciseIndex < 0) return;
         var exercise = plan[exerciseIndex];
+        var completedExercise = null;
         if (index === exercise.completedSets) {
           exercise.completedSets += 1;
           if (exercise.rest > 0 && exercise.completedSets < exercise.sets) startTimer(exercise.rest, exercise.name + " · 下一组");
+          if (exercise.completedSets === exercise.sets) completedExercise = exercise;
           if (exercise.completedSets === exercise.sets && exerciseIndex < plan.length - 1) {
             setTimeout(function () {
               var next = document.getElementById("exercise-" + plan[exerciseIndex + 1].id);
@@ -567,6 +705,7 @@
         var allDone = plan.every(function (item) { return item.completedSets === item.sets; });
         render();
         if (allDone) finishWorkout();
+        else if (completedExercise) showToast(completedExercise.name + "完成 · " + exerciseCompletionMotivations[seededIndex(dateKey() + completedExercise.id, exerciseCompletionMotivations.length)]);
       };
 
       function startTimer(seconds, label) {
@@ -603,7 +742,7 @@
         if (state.workout.completedDates.indexOf(today) < 0) state.workout.completedDates.push(today);
         saveState();
         skipTimer();
-        document.getElementById("celebrationCopy").textContent = "今日计划已记录，连续打卡 " + calculateStreak() + " 天。";
+        document.getElementById("celebrationCopy").textContent = "今日计划已记录，连续打卡 " + calculateStreak() + " 天。" + workoutCompletionMotivations[seededIndex(today + calculateStreak(), workoutCompletionMotivations.length)];
         document.getElementById("celebrationBackdrop").hidden = false;
       }
 
@@ -857,7 +996,7 @@
         var editorActions = "<button class=\"soft-button\" type=\"button\" onclick=\"openTrainingEditor('template','" + templatePart + "')\">管理训练模板</button>" +
           (currentPart === "rest" ? "" : "<button class=\"primary-button\" type=\"button\" onclick=\"openTrainingEditor('today')\">编辑今天</button>");
 
-        return hero("FITNESS · " + currentMeta.label, state.workout.planName || "选择今天的训练", currentPart === "rest" ? "休息不是偷懒，而是让下一次训练更有质量。" : "每天专注一个部位。重量由你决定，动作质量永远优先。") +
+        return hero("FITNESS · " + currentMeta.label, state.workout.planName || "选择今天的训练", fitnessMotivationFor(currentPart)) +
           "<section class=\"section panel\"><div class=\"section-heading\"><div><h3>今天练什么</h3><p>临时切换只影响今天，可勾选同步到每周计划</p></div><label class=\"checkbox-line inline\"><input id=\"persistTodayPart\" type=\"checkbox\">同步周计划</label></div><div class=\"part-grid\">" + renderPartPicker() + "</div></section>" + scheduleNotice +
           "<section class=\"section panel\"><div class=\"section-heading\"><div><h3>我的一周</h3><p>每天一个部位，也可以安排休息</p></div><button class=\"soft-button\" type=\"button\" onclick=\"openSchedule()\">修改周计划</button></div><div class=\"week-grid\">" + renderWeekSchedule() + "</div></section>" +
           "<section class=\"section two-column\"><div class=\"panel profile-summary\"><div class=\"profile-ring\">" + progress.rate + "%</div><div class=\"item-copy\"><p class=\"item-title\">今日完成 " + progress.complete + " / " + progress.total + " 组</p><div class=\"profile-facts\"><span class=\"chip\">🔥 连续 " + streak + " 天</span><span class=\"chip\">" + goalLabels[profile.goal] + "</span><span class=\"chip\">" + equipmentLabels[profile.equipment] + "</span></div></div></div>" +
@@ -1439,7 +1578,7 @@
           }));
           var payload = {
             schema: "jackson-workbench-backup",
-            version: "1.3.1",
+            version: "1.3.2",
             exportedAt: new Date().toISOString(),
             state: state,
             media: { weightPhotos: exportedPhotos }
@@ -1514,6 +1653,9 @@
       document.getElementById("themeButton").addEventListener("click", cycleTheme);
       document.getElementById("dataButton").addEventListener("click", openDataModal);
       document.getElementById("sidebarToggle").addEventListener("click", toggleSidebar);
+      document.querySelector(".app-shell").addEventListener("pointerdown", startSidebarGesture, { passive: true });
+      window.addEventListener("pointerup", finishSidebarGesture, { passive: true });
+      window.addEventListener("pointercancel", cancelSidebarGesture, { passive: true });
       document.getElementById("footerDate").textContent = dateKey().replace(/-/g, "/");
       window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () { if (state.theme === "system") applyTheme(); });
       document.addEventListener("keydown", function (event) {
@@ -1554,4 +1696,5 @@
       applyTheme();
       render();
       loadFinanceNews();
+      loadDailyQuote();
     })();

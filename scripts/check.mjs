@@ -61,14 +61,20 @@ if (!styles.includes("--sidebar-expanded-width") || !styles.includes("--sidebar-
 if (!html.includes('id="sidebarToggle"') || !html.includes('aria-controls="primarySidebar"') || !app.includes("sidebarCollapsed") || !app.includes("applySidebarState")) {
   throw new Error("侧栏折叠按钮、无障碍属性或状态持久化缺失");
 }
+if (html.includes("长按模块 500ms") || !app.includes("startSidebarGesture") || !app.includes("Math.abs(deltaX) < 56") || !styles.includes("33dvh")) {
+  throw new Error("侧栏边缘拉手、日期精简或全屏滑动手势缺失");
+}
+if (!app.includes("https://v1.hitokoto.cn/") || !app.includes("dailyQuote") || !app.includes("exerciseCompletionMotivations") || !app.includes("escapeHtml(attribution)")) {
+  throw new Error("每日暖心句、离线回退或训练激励缺失");
+}
 if (!app.includes('jackson.ai.workbench.v1.1') || !app.includes("weekSchedule") || !app.includes("lastWeights")) {
   throw new Error("训练数据迁移字段或原 localStorage 标识缺失");
 }
-if (!app.includes('version: "1.3.1"') || !app.includes("weightCheckins") || !app.includes("indexedDB.open") || !html.includes("weightForm")) {
+if (!app.includes('version: "1.3.2"') || !app.includes("weightCheckins") || !app.includes("indexedDB.open") || !html.includes("weightForm")) {
   throw new Error("V1.3 体重照片日历、IndexedDB 或打卡表单缺失");
 }
-if (!serviceWorker.includes("jackson-workbench-v1.3.1") || !html.includes("v=1.3.1")) {
-  throw new Error("PWA 缓存或页面资源版本尚未升级到 V1.3.1");
+if (!serviceWorker.includes("jackson-workbench-v1.3.2") || !html.includes("v=1.3.2")) {
+  throw new Error("PWA 缓存或页面资源版本尚未升级到 V1.3.2");
 }
 if (!workflow.includes("schedule:") || !workflow.includes("scripts/fetch-news.mjs")) {
   throw new Error("GitHub Actions 缺少定时新闻刷新配置");
@@ -82,4 +88,4 @@ if (/(?:api[_-]?key|password|secret|token)\s*[:=]\s*["'][^"']{8,}["']/i.test(pro
   throw new Error("生产代码中疑似存在硬编码敏感信息");
 }
 
-console.log("Check complete: JavaScript、PWA、侧栏折叠、数据迁移和 iPhone 配置均通过。");
+console.log("Check complete: JavaScript、PWA、侧栏手势、每日激励、数据迁移和 iPhone 配置均通过。");

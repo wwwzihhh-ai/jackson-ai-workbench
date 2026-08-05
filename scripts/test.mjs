@@ -37,6 +37,7 @@ try {
 
   if (!homeText.includes("Jackson 工作台")) throw new Error("首页内容不正确");
   if (!homeText.includes('id="sidebarToggle"') || !homeText.includes('aria-controls="primarySidebar"')) throw new Error("侧栏折叠控件不可用");
+  if (homeText.includes("长按模块 500ms")) throw new Error("侧栏底部仍显示旧版排序提示");
   if (manifest.display !== "standalone") throw new Error("manifest 未启用 standalone");
   if (!worker.ok || !icon.ok) throw new Error("PWA 静态资源无法访问");
   if (!Array.isArray(news.items) || news.refreshMinutes !== 30) throw new Error("新闻数据文件不可用");
@@ -68,7 +69,14 @@ try {
   }
   if (normalized.length !== 1) throw new Error("新闻 HTTPS 校验或标题去重失败");
 
-  console.log("Test complete: 本地服务、PWA 资源和新闻数据校验均通过。");
+  const [appSource, workerSource] = await Promise.all([
+    fetch(`http://${host}:${port}/src/app.js`).then((response) => response.text()),
+    worker.text()
+  ]);
+  if (!appSource.includes("startSidebarGesture") || !appSource.includes("loadDailyQuote();")) throw new Error("侧栏手势或每日句子启动逻辑不可用");
+  if (!workerSource.includes("jackson-workbench-v1.3.2")) throw new Error("Service Worker 未升级到 V1.3.2");
+
+  console.log("Test complete: 本地服务、PWA 资源、侧栏手势、每日句子和新闻数据校验均通过。");
 } finally {
   child.kill("SIGTERM");
 }

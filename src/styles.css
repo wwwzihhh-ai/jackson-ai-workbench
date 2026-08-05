@@ -80,6 +80,7 @@
       grid-template-columns: var(--sidebar-current-width) minmax(0, 1fr);
       background: linear-gradient(90deg, var(--sidebar) 0 var(--sidebar-current-width), var(--bg) var(--sidebar-current-width));
       transition: grid-template-columns .22s ease;
+      touch-action: pan-y;
     }
     .app-shell.sidebar-collapsed {
       --sidebar-current-width: 0px;
@@ -204,29 +205,46 @@
     .sidebar-toggle {
       position: fixed;
       z-index: 42;
-      top: max(14px, calc(env(safe-area-inset-top) + 8px));
-      left: calc(max(0px, (100vw - 1440px) / 2) + var(--sidebar-current-width) - 22px);
+      top: clamp(190px, 33vh, 360px);
+      top: clamp(190px, 33dvh, 360px);
+      left: calc(max(0px, (100vw - 1440px) / 2) + var(--sidebar-current-width) - 44px);
       width: 44px;
-      height: 44px;
+      height: 64px;
       min-width: 44px;
-      min-height: 44px;
-      display: grid;
-      place-items: center;
+      min-height: 64px;
       padding: 0;
-      border: 1px solid rgba(255,255,255,.3);
-      border-radius: 14px;
+      border: 0;
+      border-radius: 0;
       color: #fff;
-      background: rgba(36, 84, 59, .94);
-      box-shadow: 0 8px 24px rgba(12, 45, 29, .2);
-      -webkit-backdrop-filter: blur(14px);
-      backdrop-filter: blur(14px);
+      background: transparent;
       cursor: pointer;
       touch-action: manipulation;
-      transition: left .22s ease, transform .15s ease, background .15s ease, box-shadow .15s ease;
+      transition: left .22s ease, transform .15s ease;
     }
-    .sidebar-toggle:hover { transform: translateY(-1px); background: var(--sidebar-2); }
+    .sidebar-toggle::before {
+      content: "";
+      position: absolute;
+      right: 0;
+      top: 4px;
+      bottom: 4px;
+      width: 26px;
+      border: 1px solid rgba(255,255,255,.2);
+      border-right: 0;
+      border-radius: 15px 0 0 15px;
+      background: rgba(36, 84, 59, .94);
+      box-shadow: 0 8px 22px rgba(12, 45, 29, .2);
+      -webkit-backdrop-filter: blur(14px);
+      backdrop-filter: blur(14px);
+      transition: background .15s ease, box-shadow .15s ease;
+    }
+    .sidebar-toggle:hover { transform: translateY(-1px); }
+    .sidebar-toggle:hover::before { background: var(--sidebar-2); }
     .sidebar-toggle:active { transform: translateY(0) scale(.97); }
     .sidebar-toggle-icon {
+      position: absolute;
+      z-index: 1;
+      right: 1px;
+      top: 21px;
       width: 22px;
       height: 22px;
       fill: none;
@@ -237,16 +255,12 @@
     }
     .sidebar-toggle-icon-expand { display: none; }
     .sidebar-collapsed .sidebar-toggle {
-      left: max(calc(env(safe-area-inset-left) + 12px), calc((100vw - 1440px) / 2 + 12px));
-      color: #fff;
-      background: var(--sidebar);
-      border-color: rgba(255,255,255,.16);
+      left: max(env(safe-area-inset-left), calc((100vw - 1440px) / 2));
     }
+    .sidebar-collapsed .sidebar-toggle::before { left: 0; right: auto; border-right: 1px solid rgba(255,255,255,.18); border-left: 0; border-radius: 0 15px 15px 0; background: var(--sidebar); }
+    .sidebar-collapsed .sidebar-toggle-icon { left: 1px; right: auto; }
     .sidebar-collapsed .sidebar-toggle-icon-collapse { display: none; }
     .sidebar-collapsed .sidebar-toggle-icon-expand { display: block; }
-    .sidebar-collapsed .topbar {
-      padding-left: max(72px, calc(env(safe-area-inset-left) + 68px));
-    }
     .topbar-title { min-width: 0; }
     .topbar-title strong { display: block; font-size: 18px; }
     .topbar-title span { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; }
@@ -298,6 +312,7 @@
     .hero-kicker { margin: 0 0 8px; font-size: 13px; font-weight: 750; opacity: .7; }
     .hero h2 { position: relative; z-index: 1; margin: 0; font-size: clamp(26px, 5vw, 42px); line-height: 1.15; }
     .hero p { position: relative; z-index: 1; max-width: 650px; margin: 12px 0 0; line-height: 1.7; opacity: .72; }
+    .hero-attribution { position: relative; z-index: 1; display: block; margin-top: 7px; font-size: 11px; opacity: .58; }
 
     .section { margin-top: 28px; }
     .section-heading {
@@ -736,7 +751,7 @@
     @media (max-width: 720px) {
       :root { --sidebar-expanded-width: 104px; }
       .sidebar-footer { padding-inline: 5px; }
-      .topbar { min-height: 64px; gap: 8px; padding: 11px 10px 11px 38px; }
+      .topbar { min-height: 64px; gap: 8px; padding: 11px 14px; }
       .topbar-title strong { font-size: 15px; }
       .topbar-title span { display: none; }
       .icon-button { width: 38px; height: 38px; }
@@ -805,9 +820,6 @@
         .topbar {
           padding-top: max(11px, env(safe-area-inset-top));
           padding-right: max(14px, env(safe-area-inset-right));
-        }
-        .sidebar-collapsed .topbar {
-          padding-left: max(68px, calc(env(safe-area-inset-left) + 64px));
         }
       }
     }
